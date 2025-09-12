@@ -1,0 +1,102 @@
+
+Proceso para asociar un dominio de godaddy a una IP de un VPS sin morir en el intento
+
+Paso 1. Configurar DNS en GoDaddy
+
+	Entra a GoDaddy → Mis dominios
+	.
+
+	En Administrar DNS agrega estos registros:
+
+	A Record
+
+	Nombre: @
+
+	Valor: <ip-de-tu-vps>
+
+	TTL: por defecto
+
+	CNAME (para www)
+
+	Nombre: www
+
+	Valor: <nombre-de-tu-dominio>
+
+	TTL: por defecto
+
+	👉 Esto hará que tanto <nombre-de-tu-dominio> como www.<nombre-de-tu-dominio> apunten a tu VPS.
+
+Paso 2. Abrir puertos en Oracle Cloud
+
+	En el VCN / Security List o NSG de tu instancia, asegúrate de tener estas reglas Ingress:
+
+	TCP 22 → para SSH
+
+	TCP 80 → para HTTP
+
+	TCP 443 → para HTTPS
+
+  Imagen1.png
+
+	Si tu Sistame Operativo es Ubuntu, puedes seguir los siguientes pasos para configurar abrir los puertos:
+
+		sudo iptables -L INPUT // para listar las reglas de iptables
+
+		sudo nano /etc/iptables/rules.v4 //editar el archivo de iptables para configurar las reglas
+
+		-A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT -m comment --comment "Este puerto es para web" // configurar estas reglas 
+		-A INPUT -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT -m comment --comment "Este puerto es para web" //configurar estas reglas 
+
+		sudo iptables-restore < /etc/iptables/rules.v4 // para activar las reglas en iptables
+
+		Video de referencia: https://youtu.be/ZddhIXEMc7w?list=LL
+
+Paso 3. Instalar Nginx en tu VPS (Ubuntu)
+
+	sudo apt update
+	sudo apt install -y nginx
+	sudo systemctl enable --now nginx
+
+Prueba en tu navegador 👉 http://<ip-de-tu-vps>
+
+
+Paso 4. Configurar Nginx para tu dominio
+
+	sudo mkdir -p /var/www/<nombre-de-tu-dominio>/html
+	sudo chown -R $USER:$USER /var/www/<nombre-de-tu-dominio>/html
+	echo "<h1>Hola Hola Mundoooooooo 🚀</h1>" > /var/www/<nombre-de-tu-dominio>/html/index.html
+
+
+	Crea el bloque de servidor:
+
+	sudo tee /etc/nginx/sites-available/<nombre-de-tu-dominio> <<'EOF'
+	server {
+	    listen 80;
+	    server_name <nombre-de-tu-dominio> www.<nombre-de-tu-dominio>;
+
+	    root /var/www/<nombre-de-tu-dominio>/html;
+	    index index.html;
+
+	    location / {
+	        try_files $uri $uri/ =404;
+	    }
+	}
+	EOF
+
+
+	Actívalo:
+
+	sudo ln -s /etc/nginx/sites-available/<nombre-de-tu-dominio> /etc/nginx/sites-enabled/
+	sudo nginx -t
+	sudo systemctl reload nginx
+
+
+Paso 5. (Opcional pero recomendado) HTTPS con Certbot
+
+	sudo snap install core; sudo snap refresh core
+	sudo snap install --classic certbot
+	sudo ln -s /snap/bin/certbot /usr/bin/certbot
+
+	Genera certificados SSL para tu dominio:
+	sudo certbot --nginx -d <nombre-de-tu-dominio> -d www.<nombre-de-tu-dominio>
+
